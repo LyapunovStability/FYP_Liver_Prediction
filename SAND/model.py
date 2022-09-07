@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 import modules
 
+"""
+Simply Attend and Diagnose model
+
+The Thirty-Second AAAI Conference on Artificial Intelligence (AAAI-18)
+
+`Attend and Diagnose: Clinical Time Series Analysis Using Attention Models <https://arxiv.org/abs/1711.03905>`_
+Huan Song, Deepta Rajan, Jayaraman J. Thiagarajan, Andreas Spanias
+"""
+
 
 class EncoderLayerForSAnD(nn.Module):
     def __init__(self, input_features, seq_len, n_heads, n_layers, d_model=128, dropout_rate=0.2) -> None:
@@ -28,14 +37,7 @@ class EncoderLayerForSAnD(nn.Module):
 
 
 class SAnD(nn.Module):
-    """
-    Simply Attend and Diagnose model
 
-    The Thirty-Second AAAI Conference on Artificial Intelligence (AAAI-18)
-
-    `Attend and Diagnose: Clinical Time Series Analysis Using Attention Models <https://arxiv.org/abs/1711.03905>`_
-    Huan Song, Deepta Rajan, Jayaraman J. Thiagarajan, Andreas Spanias
-    """
     def __init__(
             self, input_features: int, seq_len: int, n_heads: int, factor: int,
             n_class: int, n_layers: int, d_model: int = 128, dropout_rate: float = 0.2
@@ -47,10 +49,10 @@ class SAnD(nn.Module):
 
     def forward(self, x, record_num, time_stamp):
         B, L, K = x.shape
-        mask = torch.ones(x.shape[0], x.shape[1]).to(x.device) # N,L
+        mask = torch.ones(B, L).to(x.device) # N,L
         for i in range(B):
             mask[i, :record_num[i]] = 0
-        x = self.encoder(x, time_stamp, mask)
-        x = self.dense_interpolation(x)
+        x = self.encoder(x, record_num, time_stamp, mask)
+        x = self.dense_interpolation(x, record_num)
         x = self.clf(x)
         return x

@@ -179,6 +179,66 @@ class GRD_D(nn.Module):
 
         return {'loss': y_loss, 'predictions': y_h, 'labels': labels, 'is_train': is_train}
 
+    def Timelag_gen(self, record_num, mask):
+
+        B, L, N = mask.shape
+        delta = np.zeros((B, L, N))
+        for i in range(B):
+            for j in range(L):
+                if j == record_num[i]:
+                    break
+                if k == 0:
+                    delta[i, j, :] = 1
+                else:
+                    delta[i, j, :] = (stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
+
+        return delta
+
+
+
+    def forward(self, values, mask, record_num, time_stamp, data, direct):
+        # Original sequence with 24 time steps
+        B, L, K = values.shape
+        deltas = self.Timelag_gen(record_num, mask) # B, L, K
+        forwards = data["x_forward"] # B, L, K
+        h_mask = (time_stamp + 1).bool().float() # B, L
+        h_mask = h_mask.unsqueeze(-1).expand(-1, -1, self.rnn_hid_size)
+
+
+        static_data = data["static_data"]  # B, L, K
+
+        h = Variable(torch.zeros((B, self.rnn_hid_size)))
+        c = Variable(torch.zeros((B, self.rnn_hid_size)))
+
+        if torch.cuda.is_available():
+            h, c = h.to(self.device), c.cuda().to(self.device)
+
+
+        h_state = []
+        B, L, K = values.shape
+        for t in range(L):
+            x = values[:, t, :]
+            m = mask[:, t, :]
+            d = deltas[:, t, :]
+            f = forwards[:, t, :] #上一time step observed data
+            h_m = h_mask[:, t, :]
+            gamma_h = self.temp_decay_h(d)
+            gamma_x = self.temp_decay_x(d)
+
+            h_state.append(h)
+            h = h * gamma_h
+            x_h = m * x + (1 - m) * (1 - gamma_x) * f
+            x_h = torch.cat([x_h, static_data], dim=-1)
+            inputs = torch.cat([x_h, m], dim = 1)
+            h, c = self.rnn_cell(inputs, (h, c))
+            h = h * h_m + (1 - h_m) * h_state[-1]
+
+
+        y_h = self.out(self.dropout(h))
+        y_h = torch.sigmoid(y_h)
+
+        return y_h
+
 
 
 

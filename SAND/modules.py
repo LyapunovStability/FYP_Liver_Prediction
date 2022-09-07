@@ -31,67 +31,22 @@ class PositionalEncoding(nn.Module):
         return x
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, layer: nn.Module, embed_dim: int, p=0.1) -> None:
-        super(ResidualBlock, self).__init__()
-        self.layer = layer
-        self.dropout = nn.Dropout(p=p)
-        self.norm = nn.LayerNorm(embed_dim)
-        self.attn_weights = None
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        :param x: [N, seq_len, features]
-        :return: [N, seq_len, features]
-        """
-        if isinstance(self.layer, nn.MultiheadAttention):
-            src = x.transpose(0, 1)     # [seq_len, N, features]
-            output, self.attn_weights = self.layer(src, src, src)
-            output = output.transpose(0, 1)     # [N, seq_len, features]
-
-        else:
-            output = self.layer(x)
-
-        output = self.dropout(output)
-        output = self.norm(x + output)
-        return output
-
-
-class PositionWiseFeedForward(nn.Module):
-    def __init__(self, hidden_size: int) -> None:
-        super(PositionWiseFeedForward, self).__init__()
-        self.hidden_size = hidden_size
-
-        self.conv = nn.Sequential(
-            nn.Conv1d(hidden_size, hidden_size * 2, 1),
-            nn.ReLU(),
-            nn.Conv1d(hidden_size * 2, hidden_size, 1)
-        )
-
-    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
-        tensor = tensor.transpose(1, 2)
-        tensor = self.conv(tensor)
-        tensor = tensor.transpose(1, 2)
-
-        return tensor
 
 
 class EncoderBlock(nn.Module):
     def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
         super(EncoderBlock, self).__init__()
-        self.attention = ResidualBlock(
-            nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate
-        )
-        self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
+        self.encoder = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_head, dropout=dropout_rate, activation="gelu")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.attention(x)
-        x = self.ffn(x)
+    def forward(self, x, mask):
+        x = x.transpose(0, 1) # L,D,B
+        x = self.encoder(x, src_key_padding_mask=mask)
+        x = x.transpose(0, 1)
         return x
 
 
 class DenseInterpolation(nn.Module):
-    def __init__(self, seq_len: int, factor: int) -> None:
+    def __init__(self, seq_len=48, factor=4):
         """
         :param seq_len: sequence length
         :param factor: factor M
@@ -110,39 +65,28 @@ class DenseInterpolation(nn.Module):
         W = torch.tensor(W).float().unsqueeze(0)
         self.register_buffer("W", W)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        w = self.W.repeat(x.shape[0], 1, 1).requires_grad_(False)
-        u = torch.bmm(w, x)
-        return u.transpose_(1, 2)
+    def forward(self, x, record_num) -> torch.Tensor:
+        x = x.transpose_(1, 2) # B, L, D
+        B, L, D = x.shape
+        emb = []
+        for i in range(B):
+            emb.append(x[i, record_num[i]-1, :])
+        emb = torch.stack(emb, dim=0) # B, D
+        return emb
 
 
 class ClassificationModule(nn.Module):
-    def __init__(self, d_model: int, factor: int, num_class: int) -> None:
+    def __init__(self, d_model, num_class=1) -> None:
         super(ClassificationModule, self).__init__()
         self.d_model = d_model
-        self.factor = factor
-        self.num_class = num_class
-
-        self.fc = nn.Linear(int(d_model * factor), num_class)
-
+        self.fc = nn.Linear(d_model, num_class)
         nn.init.normal_(self.fc.weight, std=0.02)
         nn.init.normal_(self.fc.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.contiguous().view(-1, int(self.factor * self.d_model))
         x = self.fc(x)
+        pred = torch.sigmoid(x)
         return x
 
 
-class RegressionModule(nn.Module):
-    def __init__(self, d_model: int, factor: int, output_size: int) -> None:
-        super(RegressionModule, self).__init__()
-        self.d_model = d_model
-        self.factor = factor
-        self.output_size = output_size
-        self.fc = nn.Linear(int(d_model * factor), output_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.contiguous().view(-1, int(self.factor * self.d_model))
-        x = self.fc(x)
-        return x
