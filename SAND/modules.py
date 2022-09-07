@@ -38,9 +38,9 @@ class EncoderBlock(nn.Module):
         super(EncoderBlock, self).__init__()
         self.encoder = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_head, dropout=dropout_rate, activation="gelu")
 
-    def forward(self, x, mask):
+    def forward(self, x, src_key_padding_mask):
         x = x.transpose(0, 1) # L,D,B
-        x = self.encoder(x, src_key_padding_mask=mask)
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)
         x = x.transpose(0, 1)
         return x
 
@@ -86,7 +86,7 @@ class ClassificationModule(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.fc(x)
         pred = torch.sigmoid(x)
-        return x
+        return pred
 
 
 

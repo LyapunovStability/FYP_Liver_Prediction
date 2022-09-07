@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import modules
+from SAND.modules import *
 
 """
 Simply Attend and Diagnose model
@@ -49,10 +49,10 @@ class SAnD(nn.Module):
 
     def forward(self, x, record_num, time_stamp):
         B, L, K = x.shape
-        mask = torch.ones(B, L).to(x.device) # N,L
+        src_key_padding_mask = torch.ones(B, L).to(x.device) # N,L
         for i in range(B):
-            mask[i, :record_num[i]] = 0
-        x = self.encoder(x, record_num, time_stamp, mask)
+            src_key_padding_mask[i, :record_num[i]] = 0
+        x = self.encoder(x, record_num, time_stamp, src_key_padding_mask)
         x = self.dense_interpolation(x, record_num)
         x = self.clf(x)
         return x

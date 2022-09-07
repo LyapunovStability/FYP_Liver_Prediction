@@ -114,98 +114,31 @@ class GRD_D(nn.Module):
 
 
 
-    def forward_HA(self, data, direct):
-        # Original sequence with 24 time steps
-
-        values = data["x"] # B, L, K
-        masks = data["m"] # B, L, K
-        deltas = data["delta"] # B, L, K
-        forwards = data["x_forward"] # B, L, K
-        h_mask = data["h_mask"]
-        labels = data["y"] # 1, 2,
-        static_data = data["static_data"]  # B, L, K
-
-        is_train = 1
-
-        labels = labels.reshape(-1, 1)
-        # is_train = data['is_train'].view(-1, 1)
-
-        h = Variable(torch.zeros((values.size()[0], self.rnn_hid_size)))
-        c = Variable(torch.zeros((values.size()[0], self.rnn_hid_size)))
-
-        if torch.cuda.is_available():
-            h, c = h.to(self.device), c.cuda().to(self.device)
-
-        y_loss = 0.0
-
-        imputations = []
-        h_state = []
-        B, L, K = values.shape
-        for t in range(L):
-            x = values[:, t, :]
-            m = masks[:, t, :]
-            d = deltas[:, t, :]
-            f = forwards[:, t, :] #上一time step observed data
-            h_m = h_mask[:, t, :]
-            gamma_h = self.temp_decay_h(d)
-            gamma_x = self.temp_decay_x(d)
-
-            h_state.append(h)
-
-            h = h * gamma_h
-
-            x_h = m * x + (1 - m) * (1 - gamma_x) * f
-
-            x_h = torch.cat([x_h, static_data], dim=-1)
-
-            inputs = torch.cat([x_h, m], dim = 1)
-
-            h, c = self.rnn_cell(inputs, (h, c))
-
-            h = h * h_m + (1 - h_m) * h_state[-1]
-
-
-
-
-            imputations.append(x_h.unsqueeze(dim = 1))
-
-        imputations = torch.cat(imputations, dim = 1)
-
-        y_h = self.out(self.dropout(h))
-        y_loss = binary_cross_entropy_with_logits(y_h, labels, reduce=False)
-        y_loss = torch.sum(y_loss * is_train) / (is_train + 1e-5)
-
-        y_h = F.sigmoid(y_h)
-
-        return {'loss': y_loss, 'predictions': y_h, 'labels': labels, 'is_train': is_train}
-
-    def Timelag_gen(self, record_num, mask):
+    def gen_aux_data(self, record_num, mask, x):
 
         B, L, N = mask.shape
-        delta = np.zeros((B, L, N))
+        delta = np.zeros((B, L, N)).to(x.device)
+        x_forward = np.zeros((B, L, N)).to(x.device)
         for i in range(B):
             for j in range(L):
                 if j == record_num[i]:
                     break
-                if k == 0:
+                if j == 0:
+                    x_forward[i, j, :] = x[i, j, :]
                     delta[i, j, :] = 1
                 else:
+                    x_forward[i, j, :] = mask[i, j, :] * x_forward[i, j, :] - (1 - mask[i, j, :]) * x_forward[i, j-1, :]
                     delta[i, j, :] = (stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
 
-        return delta
+        return delta, x_forward
 
 
 
-    def forward(self, values, mask, record_num, time_stamp, data, direct):
-        # Original sequence with 24 time steps
+    def forward(self, x, mask, record_num, time_stamp):
         B, L, K = values.shape
-        deltas = self.Timelag_gen(record_num, mask) # B, L, K
-        forwards = data["x_forward"] # B, L, K
+        deltas, forwards = self.gen_aux_data(record_num, mask, x) # B, L, K
         h_mask = (time_stamp + 1).bool().float() # B, L
         h_mask = h_mask.unsqueeze(-1).expand(-1, -1, self.rnn_hid_size)
-
-
-        static_data = data["static_data"]  # B, L, K
 
         h = Variable(torch.zeros((B, self.rnn_hid_size)))
         c = Variable(torch.zeros((B, self.rnn_hid_size)))
@@ -213,11 +146,10 @@ class GRD_D(nn.Module):
         if torch.cuda.is_available():
             h, c = h.to(self.device), c.cuda().to(self.device)
 
-
         h_state = []
         B, L, K = values.shape
         for t in range(L):
-            x = values[:, t, :]
+            x_t = x[:, t, :]
             m = mask[:, t, :]
             d = deltas[:, t, :]
             f = forwards[:, t, :] #上一time step observed data
@@ -227,7 +159,7 @@ class GRD_D(nn.Module):
 
             h_state.append(h)
             h = h * gamma_h
-            x_h = m * x + (1 - m) * (1 - gamma_x) * f
+            x_h = m * x_t + (1 - m) * (1 - gamma_x) * f
             x_h = torch.cat([x_h, static_data], dim=-1)
             inputs = torch.cat([x_h, m], dim = 1)
             h, c = self.rnn_cell(inputs, (h, c))
@@ -240,21 +172,3 @@ class GRD_D(nn.Module):
         return y_h
 
 
-
-
-    def run_on_batch_HA(self, data, optimizer, epoch=None):
-
-        y_loss = 0
-        ret = self.forward_HA(data, direct='forward')
-        loss = ret["loss"]
-
-        if optimizer is not None:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        return ret
-
-    def evaluate_on_batch_HA(self, data, optimizer, epoch=None):
-
-        return None
