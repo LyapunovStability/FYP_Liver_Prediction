@@ -77,7 +77,7 @@ class RITS(nn.Module):
 
     def build(self):
         input_size = feature_dim
-        self.rnn_cell = nn.LSTMCell(input_size * 2, self.rnn_hid_size)
+        self.rnn_cell = nn.GRUCell(input_size * 2, self.rnn_hid_size)
 
         self.temp_decay_h = TemporalDecay(input_size=input_size, output_size=self.rnn_hid_size, diag = False)
         self.temp_decay_x = TemporalDecay(input_size=input_size, output_size=input_size, diag = True)
@@ -90,7 +90,7 @@ class RITS(nn.Module):
         self.dropout = nn.Dropout(p = 0.25)
         self.out = nn.Linear(self.rnn_hid_size, 1)
 
-    def gen_aux_data(self, record_num, mask, direct):
+    def gen_aux_data(self, record_num, mask, time_stamp):
 
         B, L, N = mask.shape
         delta = np.zeros((B, L, N)).to(x.device)
@@ -102,10 +102,7 @@ class RITS(nn.Module):
                 if j == 0:
                     delta[i, j, :] = 1
                 else:
-                    if direct == "forward":
-                        delta[i, j, :] = (stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
-                    else:
-                        delta[i, j, :] = (stamp[i, j - 1] - stamp[i, j]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
+                    delta[i, j, :] = torch.abs(stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
 
         return delta
 
@@ -116,19 +113,17 @@ class RITS(nn.Module):
 
         values = x
         masks = mask
-        deltas = self.gen_aux_data(record_num, mask, direct)
+        deltas = self.gen_aux_data(record_num, mask, time_stamp)
 
-        evals = (time_stamp + 1).bool().float() # B, L
+        evals = (time_stamp).bool().float() # B, L
         h_mask = evals.unsqueeze(-1).expand(-1, -1, self.rnn_hid_size)
         eval_masks = evals.unsqueeze(-1).expand(-1, -1, K)
         h = Variable(torch.zeros((values.size()[0], self.rnn_hid_size))).to(x.device)
-        c = Variable(torch.zeros((values.size()[0], self.rnn_hid_size))).to(x.device)
+
 
         x_loss = 0.0
 
         h_state = []
-
-        if direct ==
 
 
         for t in range(L):
@@ -146,11 +141,11 @@ class RITS(nn.Module):
             x_h = self.hist_reg(h)
             x_loss += torch.sum(torch.abs(x - x_h) * m) / (torch.sum(m) + 1e-5)
 
-            x_c =  m * x +  (1 - m) * x_h
+            x_c = m * x + (1 - m) * x_h
             z_h = self.feat_reg(x_c)
             x_loss += torch.sum(torch.abs(x - z_h) * m * e_m) / (torch.sum(m) + 1e-5)
 
-            alpha = self.weight_combine(torch.cat([gamma_x, m], dim = 1))
+            alpha = self.weight_combine(torch.cat([gamma_x, m], dim=1))
 
             c_h = alpha * z_h + (1 - alpha) * x_h
             x_loss += torch.sum(torch.abs(x - c_h) * m * e_m) / (torch.sum(m) + 1e-5)
@@ -159,7 +154,7 @@ class RITS(nn.Module):
 
             inputs = torch.cat([c_c, m], dim = 1)
 
-            h, c = self.rnn_cell(inputs, (h, c))
+            h, c = self.rnn_cell(inputs, h)
             h = h * h_m + (1 - h_m) * h_state[-1]
 
             imputations.append((c_c * e_m).unsqueeze(dim = 1))
