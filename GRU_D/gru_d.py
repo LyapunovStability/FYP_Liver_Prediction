@@ -53,7 +53,7 @@ class FeatureRegression(nn.Module):
         return z_h
 
 class TemporalDecay(nn.Module):
-    def __init__(self, input_size, output_size, diag = False, device="cuda:0"):
+    def __init__(self, input_size, output_size, diag=False, device="cuda:0"):
         super(TemporalDecay, self).__init__()
         self.diag = diag
         self.device = device
@@ -86,28 +86,27 @@ class TemporalDecay(nn.Module):
         return gamma
 
 class GRD_D(nn.Module):
-    def __init__(self, rnn_hid_size, impute_weight, label_weight, device="cuda:0"):
+    def __init__(self, input_dim, rnn_hid_size, impute_weight, label_weight, device="cuda:0"):
         super(GRD_D, self).__init__()
 
         self.device = device
         self.rnn_hid_size = rnn_hid_size
-        self.impute_weight = impute_weight
-        self.label_weight = label_weight
+        self.input_dim = input_dim
 
         self.build()
 
     def build(self):
-        input_size = 16 # param dim
 
-        self.rnn_cell = nn.LSTMCell(input_size * 2 + 6, self.rnn_hid_size) # param dim + static data
 
-        self.temp_decay_h = TemporalDecay(input_size=input_size, output_size=self.rnn_hid_size, diag=False, device=self.device)
-        self.temp_decay_x = TemporalDecay(input_size=input_size, output_size=input_size, diag=True, device=self.device)
+        self.rnn_cell = nn.LSTMCell(self.input_size, self.rnn_hid_size)
 
-        self.hist_reg = nn.Linear(self.rnn_hid_size, input_size)
+        self.temp_decay_h = TemporalDecay(input_size=self.input_size, output_size=self.rnn_hid_size, diag=False, device=self.device)
+        self.temp_decay_x = TemporalDecay(input_size=self.input_size, output_size=input_size, diag=True, device=self.device)
+
+        self.hist_reg = nn.Linear(self.rnn_hid_size, self.input_size)
         self.feat_reg = FeatureRegression(input_size, device=self.device)
 
-        self.weight_combine = nn.Linear(input_size * 2, input_size)
+        self.weight_combine = nn.Linear(input_size * 2, self.input_size)
 
         self.dropout = nn.Dropout(p = 0.5)
         self.out = nn.Linear(self.rnn_hid_size, 1)
@@ -135,19 +134,15 @@ class GRD_D(nn.Module):
 
 
     def forward(self, x, mask, record_num, time_stamp):
-        B, L, K = values.shape
-        deltas, forwards = self.gen_aux_data(record_num, mask, x) # B, L, K
-        h_mask = (time_stamp + 1).bool().float() # B, L
+        B, L, K = x.shape
+        deltas, forwards = self.gen_aux_data(record_num, mask, x, time_stamp) # B, L, K
+        h_mask = (time_stamp).bool().float() # B, L
         h_mask = h_mask.unsqueeze(-1).expand(-1, -1, self.rnn_hid_size)
 
-        h = Variable(torch.zeros((B, self.rnn_hid_size)))
-        c = Variable(torch.zeros((B, self.rnn_hid_size)))
-
-        if torch.cuda.is_available():
-            h, c = h.to(self.device), c.cuda().to(self.device)
+        h = Variable(torch.zeros((B, self.rnn_hid_size))).to(x.device)
 
         h_state = []
-        B, L, K = values.shape
+
         for t in range(L):
             x_t = x[:, t, :]
             m = mask[:, t, :]
@@ -160,11 +155,9 @@ class GRD_D(nn.Module):
             h_state.append(h)
             h = h * gamma_h
             x_h = m * x_t + (1 - m) * (1 - gamma_x) * f
-            x_h = torch.cat([x_h, static_data], dim=-1)
-            inputs = torch.cat([x_h, m], dim = 1)
-            h, c = self.rnn_cell(inputs, (h, c))
+            inputs = torch.cat([x_h, m], dim=1)
+            h = self.rnn_cell(inputs, h)
             h = h * h_m + (1 - h_m) * h_state[-1]
-
 
         y_h = self.out(self.dropout(h))
         y_h = torch.sigmoid(y_h)
