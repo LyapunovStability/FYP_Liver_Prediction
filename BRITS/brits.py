@@ -7,24 +7,23 @@ from BRITS.rits import rits
 
 
 class brits(nn.Module):
-    def __init__(self, rnn_hid_size, impute_weight, label_weight):
+    def __init__(self, input_size, rnn_hid_size, impute_weight=0.3, label_weight=1):
         super(brits, self).__init__()
 
         self.rnn_hid_size = rnn_hid_size
         self.impute_weight = impute_weight
         self.label_weight = label_weight
-
+        self.input_size = input_size
         self.build()
 
     def build(self):
-        self.rits_f = rits.Model(self.rnn_hid_size, self.impute_weight, self.label_weight)
-        self.rits_b = rits.Model(self.rnn_hid_size, self.impute_weight, self.label_weight)
+        self.rits_f = rits(self.input_size, self.rnn_hid_size, self.impute_weight, self.label_weight)
+        self.rits_b = rits(self.input_size, self.rnn_hid_size, self.impute_weight, self.label_weight)
 
     def forward(self,  x, mask, record_num, time_stamp):
         ret_f = self.rits_f(x, mask, record_num, time_stamp, 'forward')
         x, mask, record_num, time_stamp = self.reverse_input(x, mask, record_num, time_stamp)
         ret_b = self.rits_b(x, mask, record_num, time_stamp, 'backward')
-        ret_b = self.rits_b(ret_b, time_stamp)
         ret = self.merge_ret(ret_f, ret_b)
 
         return ret
@@ -53,9 +52,9 @@ class brits(nn.Module):
         time_stamp_r = torch.zeros_like(time_stamp)
         for i in range(B):
             n = record_num[i]
-            x_r[i, :n, :] = x[i, n::, :]
-            mask_r[i, :n, :]  = mask[i, n::, :]
-            time_stamp_r[i, :n]  = time_stamp[i, n::]
+            x_r[i, :n, :] = torch.flip(x[i, :n, :], dims=[0])
+            mask_r[i, :n, :]  = torch.flip(mask[i, :n, :], dims=[0])
+            time_stamp_r[i, :n]  = torch.flip(time_stamp[i, :n], dims=[0])
 
         return x_r, mask_r, record_num, time_stamp_r
 

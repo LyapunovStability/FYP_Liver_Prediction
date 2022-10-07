@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
-from models.param import *
+
 import math
 from math import sqrt
 
@@ -65,10 +65,11 @@ class TemporalDecay(nn.Module):
         gamma = torch.exp(-gamma)
         return gamma
 
-class RITS(nn.Module):
-    def __init__(self, rnn_hid_size, impute_weight, label_weight):
-        super(RITS, self).__init__()
+class rits(nn.Module):
+    def __init__(self, input_size, rnn_hid_size, impute_weight, label_weight):
+        super(rits, self).__init__()
 
+        self.input_size = input_size
         self.rnn_hid_size = rnn_hid_size
         self.impute_weight = impute_weight
         self.label_weight = label_weight
@@ -76,24 +77,23 @@ class RITS(nn.Module):
         self.build()
 
     def build(self):
-        input_size = feature_dim
-        self.rnn_cell = nn.GRUCell(input_size * 2, self.rnn_hid_size)
+        self.rnn_cell = nn.GRUCell(self.input_size * 2, self.rnn_hid_size)
 
-        self.temp_decay_h = TemporalDecay(input_size=input_size, output_size=self.rnn_hid_size, diag = False)
-        self.temp_decay_x = TemporalDecay(input_size=input_size, output_size=input_size, diag = True)
+        self.temp_decay_h = TemporalDecay(input_size=self.input_size, output_size=self.rnn_hid_size, diag = False)
+        self.temp_decay_x = TemporalDecay(input_size=self.input_size, output_size=self.input_size, diag = True)
 
-        self.hist_reg = nn.Linear(self.rnn_hid_size, input_size)
-        self.feat_reg = FeatureRegression(input_size)
+        self.hist_reg = nn.Linear(self.rnn_hid_size, self.input_size)
+        self.feat_reg = FeatureRegression(self.input_size)
 
-        self.weight_combine = nn.Linear(input_size * 2, input_size)
+        self.weight_combine = nn.Linear(self.input_size * 2, self.input_size)
 
         self.dropout = nn.Dropout(p = 0.25)
         self.out = nn.Linear(self.rnn_hid_size, 1)
 
-    def gen_aux_data(self, record_num, mask, time_stamp):
+    def gen_aux_data(self, record_num, mask, stamp):
 
         B, L, N = mask.shape
-        delta = np.zeros((B, L, N)).to(x.device)
+        delta = torch.zeros((B, L, N)).to(mask.device)
 
         for i in range(B):
             for j in range(L):
@@ -102,7 +102,7 @@ class RITS(nn.Module):
                 if j == 0:
                     delta[i, j, :] = 1
                 else:
-                    delta[i, j, :] = torch.abs(stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
+                    delta[i, j, :] = torch.abs(stamp[i, j] - stamp[i, j - 1]) + (1 - mask[i, j, :]) * delta[i, j - 1, :]
 
         return delta
 
@@ -125,7 +125,7 @@ class RITS(nn.Module):
 
         h_state = []
 
-
+        imputations = []
         for t in range(L):
             x = values[:, t, :]
             m = masks[:, t, :]
@@ -154,7 +154,7 @@ class RITS(nn.Module):
 
             inputs = torch.cat([c_c, m], dim = 1)
 
-            h, c = self.rnn_cell(inputs, h)
+            h = self.rnn_cell(inputs, h)
             h = h * h_m + (1 - h_m) * h_state[-1]
 
             imputations.append((c_c * e_m).unsqueeze(dim = 1))

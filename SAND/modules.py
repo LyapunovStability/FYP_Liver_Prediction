@@ -24,7 +24,7 @@ class PositionalEncoding(nn.Module):
         B, L = time_stamp.shape
         pe = []
         for i in range(B):
-            pe.append(self.pe[time_stamp[i]])
+            pe.append(self.pe[time_stamp[i].long()])
         pe = torch.stack(pe) # B, L, D
         x = math.sqrt(self.d_model) * x
         x = x + pe.requires_grad_(False)
@@ -66,7 +66,6 @@ class DenseInterpolation(nn.Module):
         self.register_buffer("W", W)
 
     def forward(self, x, record_num) -> torch.Tensor:
-        x = x.transpose_(1, 2) # B, L, D
         B, L, D = x.shape
         emb = []
         for i in range(B):

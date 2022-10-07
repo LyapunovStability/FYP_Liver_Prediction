@@ -13,108 +13,49 @@ import random
 
 
 class MySet(Dataset):
-    def __init__(self, type="train", hid_dim=64):
+    def __init__(self, type="train"):
         super(MySet, self).__init__()
 
-        if type == "train":
-            path = "nafld_series.pickle"
-        else:
-            path = "dm_2_series.pickle"
+        # if type == "train":
+        #     path = "nafld_series.pickle"
+        # else:
+        #     path = "dm_2_series.pickle"
+        #
+        #
+        # with open(path, 'rb') as file:
+        #      dict_get = pickle.load(file)
+        # print("OK")
+        #
+        # # x, mask, record_num, time_stamp
+        #
+        # self.x = dict_get["x"]
+        # self.y = dict_get["label"]
+        # self.mask = dict_get["label"]
+        # self.time_stamp = dict_get["time_stamp"]
+        # self.record_num = dict_get["record_num"]
 
-
-        with open(path, 'rb') as file:
-             dict_get = pickle.load(file)
-        print("OK")
-
-
-        self.hid_dim = hid_dim
-        self.id = dict_get["id"]
-
-        self.x = dict_get["param"]
-        self.x_forward = dict_get["param"]
-        self.y = dict_get["label"]
-        self.mask = dict_get["mask"]
-        self.t = dict_get["time_stamp"]
-        self.static_data = dict_get["static_data"]
-        self.delta = dict_get["delta"]
-        self.medication = dict_get["medication"]
+        self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
 
 
 
 
 
     def __len__(self):
-        return len(self.id)
+        return len(self.x)
 
     def __getitem__(self, i):
-        id = self.id[i]
-        h_mask = np.zeros((len(self.mask[id]), self.hid_dim))
-        stamps = self.t[id]
-        h_mask[:len(stamps), :] = 1
-        static_data = torch.from_numpy(self.static_data[id]).float()
+        x = self.x[i]
+        y = self.y[i]
+        mask = self.mask[i]
+        time_stamp = self.time_stamp[i]
+        record_num = self.record_num[i]
 
-        x = torch.from_numpy(self.x[id]).float()
-        y = torch.tensor(self.y[id]).float()
-        delta = torch.from_numpy(self.delta[id]).float()
-        mask = torch.from_numpy(self.mask[id]).float()
-        x_forward = torch.from_numpy(self.x_forward[id]).float()
-        h_mask = torch.from_numpy(h_mask).float()
-
-
-        rec = {
-            "x": x,
-            "y": y,
-            "delta": delta,
-            "m": mask,
-            "x_forward": x_forward,
-            "h_mask": h_mask,
-            "static_data": static_data
-
-        }
-
-        return rec
+        return x, y, mask, time_stamp, record_num
 
 
 
 
-def collate_fn(recs):
-    x = []
-    y = []
-    delta = []
-    mask = []
-    x_forward = []
-    h_mask = []
-    static_data = []
-    for rec in recs:
-        x.append(rec["x"])
-        y.append(rec["y"])
-        delta.append(rec["delta"])
-        mask.append(rec["m"])
-        x_forward.append(rec["x_forward"])
-        h_mask.append(rec["h_mask"])
-        static_data.append(rec["static_data"])
 
-    x = torch.stack(x, dim=0)
-    y = torch.stack(y, dim=0)
-    delta = torch.stack(delta, dim=0)
-    mask = torch.stack(mask, dim=0)
-    x_forward = torch.stack(x_forward, dim=0)
-    h_mask = torch.stack(h_mask, dim=0)
-    static_data = torch.stack(static_data, dim=0)
-
-    rec = {
-        "x": x,
-        "y": y,
-        "delta": delta,
-        "m": mask,
-        "x_forward": x_forward,
-        "h_mask": h_mask,
-        "static_data": static_data
-    }
-
-
-
-    return rec
 
 def get_loader(batch_size = 64, shuffle = True, type="train"):
     data_set = MySet(type=type)
@@ -122,8 +63,41 @@ def get_loader(batch_size = 64, shuffle = True, type="train"):
                               batch_size = batch_size, \
                               num_workers = 4, \
                               shuffle = shuffle, \
-                              pin_memory = True, \
-                              collate_fn = collate_fn
+                              pin_memory = True,
     )
 
     return data_iter
+
+
+def simulate_data():
+    sample_num = 200
+    max_seq = 40
+    input_size = 17
+
+    record_num = []
+    x = torch.zeros((sample_num, 40, input_size))
+    mask = torch.zeros((sample_num, 40, input_size))
+    y = []
+    time_stamp = torch.zeros((sample_num, 40))
+    for i in range(sample_num):
+        num = torch.randint(1, max_seq + 1, (1,))[0]
+        stamp_i = torch.arange(num) + 1
+        time_stamp[i, :num] = stamp_i[:]
+        y_i = torch.randint(0, 2, (1,))[0]
+        record_num.append(num)
+        y.append(y_i)
+        m = torch.randint(0, 2, (num, input_size))
+        for l in range(num):
+            if m[l, :].sum() == 0:
+                m[l, -1] = 1
+        x_i = torch.rand((num, input_size))
+        x[i, :num, :] = x_i[:, :]
+        mask[i, :num, :] = m[:, :]
+
+    y = torch.tensor(y)
+    record_num = torch.tensor(record_num)
+
+    return x, y, mask, record_num, time_stamp
+
+
+

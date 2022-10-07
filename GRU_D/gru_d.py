@@ -85,39 +85,39 @@ class TemporalDecay(nn.Module):
         gamma = torch.exp(-gamma)
         return gamma
 
-class GRD_D(nn.Module):
-    def __init__(self, input_dim, rnn_hid_size, impute_weight, label_weight, device="cuda:0"):
-        super(GRD_D, self).__init__()
+class GRU_D(nn.Module):
+    def __init__(self, input_size, rnn_hid_size, device="cuda:0"):
+        super(GRU_D, self).__init__()
 
         self.device = device
         self.rnn_hid_size = rnn_hid_size
-        self.input_dim = input_dim
+        self.input_size = input_size
 
         self.build()
 
     def build(self):
 
 
-        self.rnn_cell = nn.LSTMCell(self.input_size, self.rnn_hid_size)
+        self.rnn_cell = nn.GRUCell(self.input_size * 2, self.rnn_hid_size)
 
         self.temp_decay_h = TemporalDecay(input_size=self.input_size, output_size=self.rnn_hid_size, diag=False, device=self.device)
-        self.temp_decay_x = TemporalDecay(input_size=self.input_size, output_size=input_size, diag=True, device=self.device)
+        self.temp_decay_x = TemporalDecay(input_size=self.input_size, output_size=self.input_size, diag=True, device=self.device)
 
         self.hist_reg = nn.Linear(self.rnn_hid_size, self.input_size)
-        self.feat_reg = FeatureRegression(input_size, device=self.device)
+        self.feat_reg = FeatureRegression(self.input_size, device=self.device)
 
-        self.weight_combine = nn.Linear(input_size * 2, self.input_size)
+        self.weight_combine = nn.Linear(self.input_size * 2, self.input_size)
 
-        self.dropout = nn.Dropout(p = 0.5)
+        self.dropout = nn.Dropout(p=0.5)
         self.out = nn.Linear(self.rnn_hid_size, 1)
 
 
 
-    def gen_aux_data(self, record_num, mask, x):
+    def gen_aux_data(self, record_num, mask, x, stamp):
 
         B, L, N = mask.shape
-        delta = np.zeros((B, L, N)).to(x.device)
-        x_forward = np.zeros((B, L, N)).to(x.device)
+        delta = torch.zeros((B, L, N)).to(x.device)
+        x_forward = torch.zeros((B, L, N)).to(x.device)
         for i in range(B):
             for j in range(L):
                 if j == record_num[i]:
@@ -127,7 +127,7 @@ class GRD_D(nn.Module):
                     delta[i, j, :] = 1
                 else:
                     x_forward[i, j, :] = mask[i, j, :] * x_forward[i, j, :] - (1 - mask[i, j, :]) * x_forward[i, j-1, :]
-                    delta[i, j, :] = (stamp[i, j] - stamp[i, j - 1]) + (1 - M[i, j, :]) * delta[i, j - 1, :]
+                    delta[i, j, :] = (stamp[i, j] - stamp[i, j - 1]) + (1 - mask[i, j, :]) * delta[i, j - 1, :]
 
         return delta, x_forward
 
