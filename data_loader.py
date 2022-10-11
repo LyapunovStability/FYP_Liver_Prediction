@@ -15,26 +15,40 @@ import random
 class MySet(Dataset):
     def __init__(self, type="train"):
         super(MySet, self).__init__()
+        path = "patient_data.csv"
+        data_id = pd.read_csv(path, header=0, usecols=[0]).values
+        data = pd.read_csv(path, header=0).values
+        data_id = set(data_id.squeeze(-1).tolist())
+        patient_data = []
+        patient_time = []
+        patient_label = []
+        record_num = []
+        max_len = 0
+        for id in data_id:
+            value = data[data[:, 0] == id]
+            x = value[:, 2:-2]
+            t = value[:, 1].astype("M8[M]").astype("int32")
+            t = t - t[0] + 1
+            y = value[0, -1]
+            record_num.append(len(t))
+            max_len = max(len(t), max_len)
+            patient_data.append(x)
+            patient_time.append(t)
+            patient_label.append(y)
 
-        # if type == "train":
-        #     path = "nafld_series.pickle"
-        # else:
-        #     path = "dm_2_series.pickle"
-        #
-        #
-        # with open(path, 'rb') as file:
-        #      dict_get = pickle.load(file)
-        # print("OK")
-        #
-        # # x, mask, record_num, time_stamp
-        #
-        # self.x = dict_get["x"]
-        # self.y = dict_get["label"]
-        # self.mask = dict_get["label"]
-        # self.time_stamp = dict_get["time_stamp"]
-        # self.record_num = dict_get["record_num"]
+        self.x = torch.zeros((len(data_id), max_len, 17))
+        self.mask = torch.ones((len(data_id), max_len, 17))
+        self.time_stamp = torch.zeros((len(data_id), max_len))
+        self.y = torch.tensor(patient_label)
+        for i in range(len(record_num)):
+            num = record_num[i]
+            self.x[i, :num, :] = torch.from_numpy(patient_data[i][:, :].astype("float"))
+            self.mask[i, :, 2:] = 1 - (self.x[i, :, 2:] == 0.0).float()
+            self.time_stamp[i, :num] = torch.from_numpy(patient_time[i][:].astype("float"))
+        self.record_num = torch.tensor(record_num)
 
-        self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
+
+        # self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
 
 
 
@@ -100,4 +114,4 @@ def simulate_data():
     return x, y, mask, record_num, time_stamp
 
 
-
+data_set = MySet()
