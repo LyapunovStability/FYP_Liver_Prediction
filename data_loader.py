@@ -10,6 +10,28 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import pickle
 import random
+# lab 2~18
+feature_mean = [111.66981005411401, 38.877754948643066, 45.07860606054799, 45.992427244092234,
+              147.12718977980745, 6.989963767105929, 115.07515184877008, 7.133366388932162,
+              1.221436639591917, 1.418330594123345, 2.705382125814853, 239.36558562440754,
+              13.355878455402308, 4.790074454699277, 1.985037625807247, 8.541386564955026]
+
+feature_std = [7106.654231384638, 7.0098232213744955, 73.55326516442304, 257.11350656940874,
+             201.52270095277365, 2.4558367154592307, 195.09957425653232, 1.4432099391918614,
+             0.3244507933595641, 0.760913384811514, 0.9445827702888436, 97.99000430097774,
+             18.951603980680332, 1.1394681379306435, 1.6808890993793133, 4.682248175889633]
+# age
+
+age_mean = 56.25664615109769
+age_std = 13.459039494161564
+
+#
+feature_name = ['age', 'gender',
+                'AFP', 'Albumin', 'ALT', 'AST',
+                'Creatinine', 'FBS', 'GGT', 'HbA1c',
+                'HDL', 'INR', 'LDL', 'PLT',
+                'Total Bilirubin', 'Total Cholesterol',  'Triglyceride', 'WBC']
+
 
 
 class MySet(Dataset):
@@ -24,12 +46,15 @@ class MySet(Dataset):
         patient_label = []
         record_num = []
         max_len = 0
+        print("Read Data-----------")
         for id in data_id:
             value = data[data[:, 0] == id]
-            end_t = data[:, -2].astype("M8[M]").astype("int32")
-            x = value[:, 2:-3]
+            end_t = value[:, -2].astype("M8[M]").astype("int32")
+            x = value[:, 2:-2]
             t = value[:, 1].astype("M8[M]").astype("int32")
+            # print("id: ", id)
             x, t = self.filter_data_window(x, t, end_t, window=window)
+
             t = t - t[0] + 1
             y = value[0, -1]
             record_num.append(len(t))
@@ -37,6 +62,7 @@ class MySet(Dataset):
             patient_data.append(x)
             patient_time.append(t)
             patient_label.append(y)
+
 
         self.x = torch.zeros((len(data_id), max_len, 17))
         self.mask = torch.ones((len(data_id), max_len, 17))
@@ -48,17 +74,19 @@ class MySet(Dataset):
             self.mask[i, :, 2:] = 1 - (self.x[i, :, 2:] == 0.0).float()
             self.time_stamp[i, :num] = torch.from_numpy(patient_time[i][:].astype("float"))
         self.record_num = torch.tensor(record_num)
-
-
+        print("Patient Num: ", len(self.record_num))
+        print("Finish Data-----------")
         # self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
 
     def filter_data_window(self, x, t , end_t, window=1):
         num = 0
-        for i in len(x):
+        for i in range(len(x)):
             d = end_t[i] - t[i]
-            if d < window * 12 :
+            num = i
+            if d <= (window * 12):
                 break
 
+        # print("num:", num)
         x = x[:num, :]
         t = t[:num]
 
@@ -72,9 +100,9 @@ class MySet(Dataset):
 
     def __getitem__(self, i):
         x = self.x[i]
-        y = self.y[i]
+        y = self.y[i].float()
         mask = self.mask[i]
-        time_stamp = self.time_stamp[i]
+        time_stamp = self.time_stamp[i].float()
         record_num = self.record_num[i]
 
         return x, y, mask, time_stamp, record_num
@@ -114,10 +142,10 @@ class MySet(Dataset):
 
 
 
-def get_dataloader(batch_size, path="patient_data.csv", time_window=0.5):
-    dataset = MySet(path=path, time_window=time_window)
+def get_dataloader(path="patient_data.csv", time_window=0.5):
+    dataset = MySet(path=path, window=time_window)
     data_loader = DataLoader(
-        dataset, batch_size=batch_size, num_workers=1, shuffle=True
+        dataset, batch_size=64, num_workers=1, shuffle=True
     )
 
 

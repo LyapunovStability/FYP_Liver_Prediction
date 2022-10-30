@@ -3,7 +3,7 @@ from SAND.model import SAnD as sand
 from BRITS.brits import brits as brits
 import torch
 import argparse
-from data_loader import get_loader
+from data_loader import get_dataloader
 
 if __name__ == '__main__':
 
@@ -12,29 +12,36 @@ if __name__ == '__main__':
     parser.add_argument("--path", type=str, default="patient_data.csv")
     parser.add_argument('--device', default='cpu')
     parser.add_argument("--model", type=str, default="brits")
-    parser.add_argument("--input_size", type=int, default=17)
+    # parser.add_argument("--input_size", type=int, default=17)
     parser.add_argument("--type", type=str, default="test")
 
 
     args = parser.parse_args()
+    print(args)
+
     if args.model == "gru_d":
-        model = gru_d(input_size=args.input_size, rnn_hid_size=32, device=args.device).to(args.device)
+        model = gru_d(input_size=18, rnn_hid_size=32, device=args.device).to(args.device)
     elif args.model == "brits":
-        model = brits(input_size=args.input_size, rnn_hid_size=32).to(args.device)
+        model = brits(input_size=18, rnn_hid_size=32).to(args.device)
     elif args.model == "sand":
-        model = sand(input_features=args.input_size).to(args.device)
+        model = sand(input_features=18).to(args.device)
 
 
-    data_loader = get_loader(path=args.path, time_window=args.time_window)
+    data_loader = get_dataloader(path=args.path, time_window=args.pred_window)
 
     if args.type == "train":
-        epoch = 2
+        epoch = 50
         bce_loss = torch.nn.BCELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-6)
         for epoch_no in range(epoch):
             avg_loss = 0
             model.train()
             for batch_no, (x, y, mask, time_stamp, record_num) in enumerate(data_loader, start=1):
+                x = x.to(args.device)
+                y = y.to(args.device)
+                mask = mask.to(args.device)
+                time_stamp = time_stamp.to(args.device)
+                record_num = record_num.to(args.device)
                 output = model(x, mask, record_num, time_stamp)
                 if args.model == "gru_d" or args.model == "sand":
                     pred_prob = output
@@ -44,6 +51,13 @@ if __name__ == '__main__':
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                avg_loss += loss.item()
+
+            print("epoch: ", epoch_no,
+                  "Avg Loss：{:.4f}".format(avg_loss / batch_no)
+                  )
+        output = "{0}_{1}.pth".format(args.model, args.pred_window)
+        torch.save(model.state_dict(), output_path)
 
     elif args.type == "test":
         preds = []
