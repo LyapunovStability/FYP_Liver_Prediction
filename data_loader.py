@@ -13,9 +13,9 @@ import random
 
 
 class MySet(Dataset):
-    def __init__(self, type="train"):
+    def __init__(self, path="patient_data.csv", window=1.0):
         super(MySet, self).__init__()
-        path = "patient_data.csv"
+        path = path
         data_id = pd.read_csv(path, header=0, usecols=[0]).values
         data = pd.read_csv(path, header=0).values
         data_id = set(data_id.squeeze(-1).tolist())
@@ -26,8 +26,10 @@ class MySet(Dataset):
         max_len = 0
         for id in data_id:
             value = data[data[:, 0] == id]
-            x = value[:, 2:-2]
+            end_t = data[:, -2].astype("M8[M]").astype("int32")
+            x = value[:, 2:-3]
             t = value[:, 1].astype("M8[M]").astype("int32")
+            x, t = self.filter_data_window(x, t, end_t, window=window)
             t = t - t[0] + 1
             y = value[0, -1]
             record_num.append(len(t))
@@ -50,6 +52,17 @@ class MySet(Dataset):
 
         # self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
 
+    def filter_data_window(self, x, t , end_t, window=1):
+        num = 0
+        for i in len(x):
+            d = end_t[i] - t[i]
+            if d < window * 12 :
+                break
+
+        x = x[:num, :]
+        t = t[:num]
+
+        return x, t
 
 
 
@@ -69,49 +82,43 @@ class MySet(Dataset):
 
 
 
+# def simulate_data():
+#     sample_num = 200
+#     max_seq = 40
+#     input_size = 17
+#
+#     record_num = []
+#     x = torch.zeros((sample_num, 40, input_size))
+#     mask = torch.zeros((sample_num, 40, input_size))
+#     y = []
+#     time_stamp = torch.zeros((sample_num, 40))
+#     for i in range(sample_num):
+#         num = torch.randint(1, max_seq + 1, (1,))[0]
+#         stamp_i = torch.arange(num) + 1
+#         time_stamp[i, :num] = stamp_i[:]
+#         y_i = torch.randint(0, 2, (1,))[0]
+#         record_num.append(num)
+#         y.append(y_i)
+#         m = torch.randint(0, 2, (num, input_size))
+#         for l in range(num):
+#             if m[l, :].sum() == 0:
+#                 m[l, -1] = 1
+#         x_i = torch.rand((num, input_size))
+#         x[i, :num, :] = x_i[:, :]
+#         mask[i, :num, :] = m[:, :]
+#
+#     y = torch.tensor(y)
+#     record_num = torch.tensor(record_num)
+#
+#     return x, y, mask, record_num, time_stamp
 
 
-def get_loader(batch_size = 64, shuffle = True, type="train"):
-    data_set = MySet(type=type)
-    data_iter = DataLoader(dataset = data_set, \
-                              batch_size = batch_size, \
-                              num_workers = 4, \
-                              shuffle = shuffle, \
-                              pin_memory = True,
+
+def get_dataloader(batch_size, path="patient_data.csv", time_window=0.5):
+    dataset = MySet(path=path, time_window=time_window)
+    data_loader = DataLoader(
+        dataset, batch_size=batch_size, num_workers=1, shuffle=True
     )
 
-    return data_iter
 
-
-def simulate_data():
-    sample_num = 200
-    max_seq = 40
-    input_size = 17
-
-    record_num = []
-    x = torch.zeros((sample_num, 40, input_size))
-    mask = torch.zeros((sample_num, 40, input_size))
-    y = []
-    time_stamp = torch.zeros((sample_num, 40))
-    for i in range(sample_num):
-        num = torch.randint(1, max_seq + 1, (1,))[0]
-        stamp_i = torch.arange(num) + 1
-        time_stamp[i, :num] = stamp_i[:]
-        y_i = torch.randint(0, 2, (1,))[0]
-        record_num.append(num)
-        y.append(y_i)
-        m = torch.randint(0, 2, (num, input_size))
-        for l in range(num):
-            if m[l, :].sum() == 0:
-                m[l, -1] = 1
-        x_i = torch.rand((num, input_size))
-        x[i, :num, :] = x_i[:, :]
-        mask[i, :num, :] = m[:, :]
-
-    y = torch.tensor(y)
-    record_num = torch.tensor(record_num)
-
-    return x, y, mask, record_num, time_stamp
-
-
-data_set = MySet()
+    return data_loader
