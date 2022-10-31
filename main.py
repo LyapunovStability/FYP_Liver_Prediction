@@ -11,9 +11,10 @@ if __name__ == '__main__':
     parser.add_argument("--pred_window", type=float, default=0.5)
     parser.add_argument("--path", type=str, default="patient_data.csv")
     parser.add_argument('--device', default='cpu')
-    parser.add_argument("--model", type=str, default="brits")
-    # parser.add_argument("--input_size", type=int, default=17)
+    parser.add_argument("--model", type=str, default="gru_d")
+    parser.add_argument("--epoch", type=int, default=100)
     parser.add_argument("--type", type=str, default="test")
+    parser.add_argument("--load_model", type=str, default="gru_d_0.5.pth")
 
 
     args = parser.parse_args()
@@ -29,8 +30,10 @@ if __name__ == '__main__':
 
     data_loader = get_dataloader(path=args.path, time_window=args.pred_window)
 
+
+    ##------------------Only for training (ignore)--------------------
     if args.type == "train":
-        epoch = 50
+        epoch = args.epoch
         bce_loss = torch.nn.BCELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-6)
         for epoch_no in range(epoch):
@@ -56,12 +59,20 @@ if __name__ == '__main__':
             print("epoch: ", epoch_no,
                   "Avg Loss：{:.4f}".format(avg_loss / batch_no)
                   )
-        output = "{0}_{1}.pth".format(args.model, args.pred_window)
+        output_path = "{0}_{1}.pth".format(args.model, args.pred_window)
         torch.save(model.state_dict(), output_path)
 
+    ##------------------For testing (load a pre-trained model)--------------------
     elif args.type == "test":
         preds = []
         for batch_no, (x, y, mask, time_stamp, record_num) in enumerate(data_loader, start=1):
+            x = x.to(args.device)
+            y = y.to(args.device)
+            mask = mask.to(args.device)
+            time_stamp = time_stamp.to(args.device)
+            record_num = record_num.to(args.device)
+            model.load_state_dict(torch.load("./load_model/{}".format(args.load_model)))
+            model = model.to(args.device)
             output = model(x, mask, record_num, time_stamp)
             if args.model == "gru_d" or args.model == "sand":
                 pred_prob = output

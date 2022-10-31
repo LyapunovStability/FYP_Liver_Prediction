@@ -18,7 +18,13 @@
 
 
 
-## Model for Clinical Tabular Data
+## Command for running the model
 
-* TabularNet
----just based on MLP
+"load_model" folder: 3 pre-trained models with time window "1 year" or "0.5 year"
+
+when running a pre-trained model---ex, GRU_D 
+
+```key
+     python main.py --pred_window 0.5  --type test --device cpu --model gru_d --load_model gru_d_0.5.pth
+``` 
+

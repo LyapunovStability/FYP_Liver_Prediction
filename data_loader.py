@@ -64,8 +64,8 @@ class MySet(Dataset):
             patient_label.append(y)
 
 
-        self.x = torch.zeros((len(data_id), max_len, 17))
-        self.mask = torch.ones((len(data_id), max_len, 17))
+        self.x = torch.zeros((len(data_id), max_len, 18))
+        self.mask = torch.ones((len(data_id), max_len, 18))
         self.time_stamp = torch.zeros((len(data_id), max_len))
         self.y = torch.tensor(patient_label)
         for i in range(len(record_num)):
@@ -145,7 +145,7 @@ class MySet(Dataset):
 def get_dataloader(path="patient_data.csv", time_window=0.5):
     dataset = MySet(path=path, window=time_window)
     data_loader = DataLoader(
-        dataset, batch_size=64, num_workers=1, shuffle=True
+        dataset, batch_size=64, num_workers=1, shuffle=False
     )
 
 
