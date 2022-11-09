@@ -5,6 +5,15 @@ import torch
 import argparse
 from data_loader import get_dataloader
 
+# def test(pred_window=0.5, path="patient_data.csv", device="cpu", model="gru_d", epoch=100, load_model="gru_d_0.5.pth"):
+    
+#     print("----Test Mode------")
+    
+
+
+
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="FYP")
@@ -73,10 +82,12 @@ if __name__ == '__main__':
             record_num = record_num.to(args.device)
             model.load_state_dict(torch.load("./load_model/{}".format(args.load_model)))
             model = model.to(args.device)
+            model.eval()
             output = model(x, mask, record_num, time_stamp)
-            if args.model == "gru_d" or args.model == "sand":
-                pred_prob = output
+            output = output.detach()
+            if args.model == "gru_d" or args.model == "sand": # the output value means the risk of developing liver disease
+                pred_prob = output 
             else:
                 pred_prob = output["predictions"]
             preds.append(pred_prob.squeeze(-1))
-        preds = torch.cat(preds, dim=0)
+        preds = torch.cat(preds, dim=0).cpu().numpy() # size: B, "B" is patient number. 

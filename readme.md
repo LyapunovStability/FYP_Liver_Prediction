@@ -41,3 +41,8 @@ python main.py --pred_window 1.0  --type test --device cpu --model gru_d --load_
 
 ``` 
 
+## Q & A
+**Q1:** *What does the output of model mean ?*
+
+**A1:** The output of model is a value of [0, 1], and it caaould represent the risk of developing liver disease for this patient. For example, if the output is 0.19, we could assume that the model think this patient will have 19% probability to develop liver disease. 
+
