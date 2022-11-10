@@ -38,16 +38,18 @@ class MySet(Dataset):
     def __init__(self, path="patient_data.csv", window=1.0):
         super(MySet, self).__init__()
         path = path
-        data_id = pd.read_csv(path, header=0, usecols=[0]).values
+        data_id = pd.read_csv(path, header=0, usecols=[0])
+        data_id.drop_duplicates(inplace=True)
+        self.data_id = data_id.values.squeeze(-1)
         data = pd.read_csv(path, header=0).values
-        data_id = set(data_id.squeeze(-1).tolist())
+        
         patient_data = []
         patient_time = []
         patient_label = []
         record_num = []
         max_len = 0
         print("Read Data-----------")
-        for id in data_id:
+        for id in self.data_id:
             value = data[data[:, 0] == id]
             end_t = value[:, -2].astype("M8[M]").astype("int32")
             x = value[:, 2:-2]
@@ -101,11 +103,12 @@ class MySet(Dataset):
     def __getitem__(self, i):
         x = self.x[i]
         y = self.y[i].float()
+        id = self.data_id[i]
         mask = self.mask[i]
         time_stamp = self.time_stamp[i].float()
         record_num = self.record_num[i]
 
-        return x, y, mask, time_stamp, record_num
+        return x, y, mask, time_stamp, record_num, id
 
 
 
@@ -145,8 +148,11 @@ class MySet(Dataset):
 def get_dataloader(path="patient_data.csv", time_window=0.5):
     dataset = MySet(path=path, window=time_window)
     data_loader = DataLoader(
-        dataset, batch_size=64, num_workers=1, shuffle=False
+        dataset, batch_size=100, num_workers=1, shuffle=False
     )
 
 
     return data_loader
+
+# MySet()
+

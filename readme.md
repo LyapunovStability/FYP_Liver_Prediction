@@ -25,19 +25,44 @@
 
 
 
+
 ## Usage
 The 3 pre-trained models with two kinds of prediction time window ("1 year" or "0.5 year") are saved in the "load_model" folder 
 
-Command for testing above pre-trained models(ex, GRU-D):
+python function ("test()" in the main.py) for testing above pre-trained models(ex, GRU-D):
 
 
 ```bash
-
 # GRU-D, Prediction_Window = 0.5 year
-python main.py --pred_window 0.5  --type test --device cpu --model gru_d --load_model gru_d_0.5.pth
+from main import test
+import json
+input = {
+    "pred_window":0.5,
+    "device":"cpu",
+    "model_name":"gru_d",
+    "load_model":"gru_d_0.5.pth",
+    "path":"patient_data.csv"
+    
+}
+input = json.dumps(input)
+test(input)
+```
 
+```bash
 # GRU-D, Prediction_Window = 1.0 year
-python main.py --pred_window 1.0  --type test --device cpu --model gru_d --load_model gru_d_1.0.pth
+from main import test
+import json
+input = {
+    "pred_window":1.0,
+    "device":"cpu",
+    "model_name":"gru_d",
+    "load_model":"gru_d_1.0.pth",
+    "path":"patient_data.csv"
+    
+}
+input = json.dumps(input)
+test(input)
+
 
 ``` 
 
