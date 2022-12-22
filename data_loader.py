@@ -11,15 +11,15 @@ from torch.utils.data import Dataset, DataLoader
 import pickle
 import random
 # lab 2~18
-feature_mean = [111.66981005411401, 38.877754948643066, 45.07860606054799, 45.992427244092234,
+feature_mean = np.array([111.66981005411401, 38.877754948643066, 45.07860606054799, 45.992427244092234,
               147.12718977980745, 6.989963767105929, 115.07515184877008, 7.133366388932162,
               1.221436639591917, 1.418330594123345, 2.705382125814853, 239.36558562440754,
-              13.355878455402308, 4.790074454699277, 1.985037625807247, 8.541386564955026]
+              13.355878455402308, 4.790074454699277, 1.985037625807247, 8.541386564955026])
 
-feature_std = [7106.654231384638, 7.0098232213744955, 73.55326516442304, 257.11350656940874,
+feature_std = np.array([7106.654231384638, 7.0098232213744955, 73.55326516442304, 257.11350656940874,
              201.52270095277365, 2.4558367154592307, 195.09957425653232, 1.4432099391918614,
              0.3244507933595641, 0.760913384811514, 0.9445827702888436, 97.99000430097774,
-             18.951603980680332, 1.1394681379306435, 1.6808890993793133, 4.682248175889633]
+             18.951603980680332, 1.1394681379306435, 1.6808890993793133, 4.682248175889633])
 # age
 
 age_mean = 56.25664615109769
@@ -56,7 +56,6 @@ class MySet(Dataset):
             t = value[:, 1].astype("M8[M]").astype("int32")
             # print("id: ", id)
             x, t = self.filter_data_window(x, t, end_t, window=window)
-
             t = t - t[0] + 1
             y = value[0, -1]
             record_num.append(len(t))
@@ -76,6 +75,7 @@ class MySet(Dataset):
             self.mask[i, :, 2:] = 1 - (self.x[i, :, 2:] == 0.0).float()
             self.time_stamp[i, :num] = torch.from_numpy(patient_time[i][:].astype("float"))
         self.record_num = torch.tensor(record_num)
+        self.x_norm = self.normalize(self.x, self.mask)
         print("Patient Num: ", len(self.record_num))
         print("Finish Data-----------")
         # self.x, self.y, self.mask, self.record_num, self.time_stamp = simulate_data()
@@ -94,21 +94,27 @@ class MySet(Dataset):
 
         return x, t
 
+    def normalize(self, x, mask):
+        x[:, :, 2:] = (x[:, :, 2:] - np.expand_dims(feature_mean, axis=(0, 1)))/(np.expand_dims(feature_std, axis=(0, 1)) + 1e-5)
+        x[:, :, 0] = (x[:, :, 0] - np.expand_dims(age_mean, axis=(0, 1)))/(np.expand_dims(age_std, axis=(0, 1)) + 1e-5)
+        x = x * mask
 
+        return x
 
 
     def __len__(self):
         return len(self.x)
 
+
     def __getitem__(self, i):
-        x = self.x[i]
+        x_norm = self.x_norm[i]
         y = self.y[i].float()
         id = self.data_id[i]
         mask = self.mask[i]
         time_stamp = self.time_stamp[i].float()
         record_num = self.record_num[i]
 
-        return x, y, mask, time_stamp, record_num, id
+        return x_norm, y, mask, time_stamp, record_num, id
 
 
 
@@ -148,7 +154,7 @@ class MySet(Dataset):
 def get_dataloader(path="patient_data.csv", time_window=0.5):
     dataset = MySet(path=path, window=time_window)
     data_loader = DataLoader(
-        dataset, batch_size=100, num_workers=1, shuffle=False
+        dataset, batch_size=dataset.__len__(), num_workers=3, shuffle=False
     )
 
 
