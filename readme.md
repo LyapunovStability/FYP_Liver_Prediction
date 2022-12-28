@@ -22,6 +22,7 @@
 - numpy == 1.19.0
 - pandas == 0.25.1
 - torch == 1.9.0
+- scikit-learn
 
 
 

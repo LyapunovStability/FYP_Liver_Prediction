@@ -4,6 +4,7 @@ from BRITS.brits import brits as brits
 import torch
 import argparse
 from data_loader import get_dataloader
+from sklearn.metrics import average_precision_score,roc_auc_score
 import json
 
 
@@ -28,6 +29,7 @@ def test(input):
     data_loader = get_dataloader(path=path, time_window=pred_window)
     preds = []
     ids = []
+    ys = []
     for batch_no, (x, y, mask, time_stamp, record_num, id) in enumerate(data_loader, start=1):
         x = x.to(device)
         y = y.to(device)
@@ -40,34 +42,39 @@ def test(input):
         model.eval()
         ids.append(id)
         output = model(x, mask, record_num, time_stamp)
-        output = output.detach()
         if model_name == "gru_d" or model_name == "sand": # the output value means the risk of developing liver disease
-            pred_prob = output 
+            pred_prob = output.detach()
         else:
-            pred_prob = output["predictions"]
-        
+            pred_prob = output["predictions"].detach()
+        ys.append(y.squeeze(-1))
         preds.append(pred_prob.squeeze(-1))
     
     ids = torch.cat(ids, dim=0).cpu().numpy()
-    preds = torch.cat(preds, dim=0).cpu().numpy() # size: B, "B" is patient number. 
+    preds = torch.cat(preds, dim=0).cpu().numpy() # size: B, "B" is patient number.
+    ys = torch.cat(ys, dim=0).cpu().numpy()
+
+    auroc = roc_auc_score(ys, preds)
+    auprc = average_precision_score(ys, preds)
+    print("AUROC: ", auroc)
+    print("AUPRC: ", auprc)
     
     output = { 'pred' : preds.tolist(), 'id' : ids.tolist()}
     output = json.dumps(output)
     # print(output)
-        
+   
     return output
     
 
 #-----Test for above function----
 
-input = {
-    "pred_window":0.5,
-    "device":"cpu",
-    "model_name":"gru_d",
-    "load_model":"gru_d_0.5.pth",
-    "path":"patient_data.csv"
+# input = {
+#     "pred_window":0.5,
+#     "device":"cpu",
+#     "model_name":"gru_d",
+#     "load_model":"gru_d_0.5.pth",
+#     "path":"patient_data.csv"
     
-}
+# }
 
 # input = {
 #     "pred_window":1.0,
@@ -82,21 +89,38 @@ input = {
 # input = {
 #     "pred_window":0.5,
 #     "device":"cpu",
-#     "model_name":"brist",
+#     "model_name":"brits",
 #     "load_model":"brits_0.5.pth",
 #     "path":"patient_data.csv"
     
 # }
 
+input = {
+    "pred_window":1.0,
+    "device":"cpu",
+    "model_name":"brits",
+    "load_model":"brits_1.0.pth",
+    "path":"patient_data.csv"
+    
+}
+
 # input = {
 #     "pred_window":1.0,
 #     "device":"cpu",
-#     "model_name":"brist",
-#     "load_model":"brits_1.0.pth",
+#     "model_name":"sand",
+#     "load_model":"sand_1.0.pth",
 #     "path":"patient_data.csv"
     
 # }
 
+# input = {
+#     "pred_window":0.5,
+#     "device":"cpu",
+#     "model_name":"sand",
+#     "load_model":"sand_0.5.pth",
+#     "path":"patient_data.csv"
+    
+# }
 
 
 input = json.dumps(input)
