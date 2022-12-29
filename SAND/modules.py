@@ -69,8 +69,13 @@ class DenseInterpolation(nn.Module):
         B, L, D = x.shape
         emb = []
         for i in range(B):
-            mean = torch.mean(x[i, :record_num[i], :], dim=0)
+            # x_emb = torch.cat([x[i, record_num[i]-1, :], x[i, 0, :], x[i, record_num[i]//2, :]], dim=-1)
+            #mean = torch.mean(x[i, :record_num[i], :], dim=0)
+      
+            mid = record_num[i].item()//2
+            mean = torch.mean(x[i, mid:record_num[i], :], dim=0)
             # emb.append(x[i, record_num[i]-1, :])
+            # emb.append(x_emb)
             emb.append(mean)
         emb = torch.stack(emb, dim=0) # B, D
         return emb

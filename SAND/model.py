@@ -40,16 +40,17 @@ class SAnD(nn.Module):
 
     def __init__(
             self, input_features,
-            factor=4, n_class=1, seq_len=1000, n_heads=8, n_layers=3, d_model=128, dropout_rate=0.2
+            factor=4, n_class=1, seq_len=1000, n_heads=8, n_layers=2, d_model=128, dropout_rate=0.0
     ) -> None:
         super(SAnD, self).__init__()
-        self.encoder = EncoderLayerForSAnD(input_features, seq_len, n_heads, n_layers, d_model, dropout_rate)
+        self.encoder = EncoderLayerForSAnD(input_features * 2, seq_len, n_heads, n_layers, d_model, dropout_rate)
         self.dense_interpolation = DenseInterpolation(seq_len, factor)
         self.clf = ClassificationModule(d_model, n_class)
 
     def forward(self, x, mask, record_num, time_stamp):
         B, L, K = x.shape
         src_key_padding_mask = torch.ones(B, L).to(x.device) # N,L
+        x = torch.cat([x, mask], dim=-1)
         for i in range(B):
             src_key_padding_mask[i, :record_num[i]] = 0
         x = self.encoder(x, time_stamp, src_key_padding_mask)
