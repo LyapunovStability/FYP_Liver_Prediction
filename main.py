@@ -1,9 +1,10 @@
 from GRU_D.gru_d import GRU_D as gru_d
 from SAND.model import SAnD as sand
 from BRITS.brits import brits as brits
+from TabularNet.model import model as tabularnet
 import torch
 import argparse
-from data_loader import get_dataloader
+from data_loader import get_dataloader, get_dataloader_single
 from sklearn.metrics import average_precision_score,roc_auc_score
 import json
 
@@ -25,8 +26,15 @@ def test(input):
         model = brits(input_size=18, rnn_hid_size=32).to(device)
     elif model_name == "sand":
         model = sand(input_features=18).to(device)
-
-    data_loader = get_dataloader(path=path, time_window=pred_window)
+    elif model_name == "tabularnet":
+        model = tabularnet(input_features=18).to(device)
+    
+    
+    if model_name == "tabularnet":
+        data_loader = get_dataloader_single(path=path, time_window=pred_window)
+    else:
+        data_loader = get_dataloader(path=path, time_window=pred_window)
+    
     preds = []
     ids = []
     ys = []
@@ -42,7 +50,7 @@ def test(input):
         model.eval()
         ids.append(id)
         output = model(x, mask, record_num, time_stamp)
-        if model_name == "gru_d" or model_name == "sand": # the output value means the risk of developing liver disease
+        if model_name == "gru_d" or model_name == "sand" or model_name == "tabularnet": # the output value means the risk of developing liver disease
             pred_prob = output.detach()
         else:
             pred_prob = output["predictions"].detach()
@@ -57,6 +65,12 @@ def test(input):
     auprc = average_precision_score(ys, preds)
     print("AUROC: ", auroc)
     print("AUPRC: ", auprc)
+    print(pred_window)
+    for i in range(len(ys)):
+        if ys[i] == 1:
+            print(preds[i])
+       
+    
     
     output = { 'pred' : preds.tolist(), 'id' : ids.tolist()}
     output = json.dumps(output)
@@ -95,14 +109,14 @@ def test(input):
     
 # }
 
-input = {
-    "pred_window":1.0,
-    "device":"cpu",
-    "model_name":"brits",
-    "load_model":"brits_1.0.pth",
-    "path":"patient_data.csv"
+# input = {
+#     "pred_window":1.0,
+#     "device":"cpu",
+#     "model_name":"brits",
+#     "load_model":"brits_1.0.pth",
+#     "path":"patient_data.csv"
     
-}
+# }
 
 # input = {
 #     "pred_window":1.0,
@@ -118,6 +132,25 @@ input = {
 #     "device":"cpu",
 #     "model_name":"sand",
 #     "load_model":"sand_0.5.pth",
+#     "path":"patient_data.csv"
+    
+# }
+
+input = {
+    "pred_window":1.0,
+    "device":"cpu",
+    "model_name":"tabularnet",
+    "load_model":"tabularnet_1.0.pth",
+    "path":"patient_data.csv"
+    
+}
+
+
+# input = {
+#     "pred_window":0.5,
+#     "device":"cpu",
+#     "model_name":"tabularnet",
+#     "load_model":"tabularnet_0.5.pth",
 #     "path":"patient_data.csv"
     
 # }
