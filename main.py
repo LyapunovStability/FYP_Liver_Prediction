@@ -63,12 +63,12 @@ def test(input):
 
     auroc = roc_auc_score(ys, preds)
     auprc = average_precision_score(ys, preds)
-    print("AUROC: ", auroc)
-    print("AUPRC: ", auprc)
-    print(pred_window)
-    for i in range(len(ys)):
-        if ys[i] == 1:
-            print(preds[i])
+    # print("AUROC: ", auroc)
+    # print("AUPRC: ", auprc)
+    # print(pred_window)
+    # for i in range(len(ys)):
+    #     if ys[i] == 1:
+    #         print(preds[i])
        
     
     
